@@ -177,6 +177,14 @@ class HospitalFeatureEngineer:
                 logger.warning("Could not find columns to compute total_patients")
                 df_features['total_patients'] = 0
         
+        # Filter for realistic values and clip to reasonable range
+        # Ensure state and total_patients are not null, and allow 0+ values
+        df_features = df_features[df_features['total_patients'].notnull()]
+        df_features = df_features[df_features['state'].notnull()]
+        df_features = df_features[df_features['total_patients'] >= 0]  # allow 0+
+        df_features['total_patients'] = df_features['total_patients'].clip(0, 10000)
+        logger.info(f"Filtered and clipped total_patients. Records after filtering: {len(df_features)}")
+        
         # Calculate ICU patients from 7-day average column
         icu_col = 'staffed_icu_adult_patients_confirmed_covid_7_day_avg'
         if icu_col in df_features.columns:

@@ -172,12 +172,12 @@ class HospitalDashboard:
             st.warning("No data available for summary metrics")
             return
         
-        # Calculate summary statistics
+        # Calculate summary statistics using the correct method
         if target_metric in df.columns:
             current_value = df[target_metric].iloc[-1] if len(df) > 0 else 0
-            avg_value = df[target_metric].mean()
-            max_value = df[target_metric].max()
-            min_value = df[target_metric].min()
+            average = df[target_metric].mean()
+            maximum = df[target_metric].max()
+            minimum = df[target_metric].min()
             
             # Create metric columns
             col1, col2, col3, col4 = st.columns(4)
@@ -186,29 +186,39 @@ class HospitalDashboard:
                 st.metric(
                     label="Current Value",
                     value=f"{current_value:.1f}",
-                    delta=f"{current_value - avg_value:.1f}"
+                    delta=f"{current_value - average:.1f}"
                 )
             
             with col2:
                 st.metric(
                     label="Average",
-                    value=f"{avg_value:.1f}",
+                    value=f"{average:.1f}",
                     delta=None
                 )
             
             with col3:
                 st.metric(
                     label="Maximum",
-                    value=f"{max_value:.1f}",
+                    value=f"{maximum:.1f}",
                     delta=None
                 )
             
             with col4:
                 st.metric(
                     label="Minimum",
-                    value=f"{min_value:.1f}",
+                    value=f"{minimum:.1f}",
                     delta=None
                 )
+            
+            # Add debug checkbox to show raw data
+            if st.checkbox("Show raw data"):
+                st.subheader("Raw Data (Last 20 records)")
+                debug_columns = ["state", "hospital_name", target_metric]
+                available_columns = [col for col in debug_columns if col in df.columns]
+                if available_columns:
+                    st.dataframe(df[available_columns].tail(20))
+                else:
+                    st.write("Required columns not available for debug view")
     
     def create_time_series_plot(self, df: pd.DataFrame, target_metric: str, 
                                forecasts: Dict[str, np.ndarray], models_to_show: List[str]):
@@ -343,20 +353,28 @@ class HospitalDashboard:
             st.warning("No regional data available for heatmap")
             return
         
-        # Aggregate by state
-        state_data = df.groupby('state')[target_metric].agg(['mean', 'max', 'min']).reset_index()
+        # Ensure state and target_metric are not null
+        df_clean = df[df['state'].notnull()]
+        df_clean = df_clean[df_clean[target_metric].notnull()]
         
-        if not state_data.empty:
-            # Create heatmap
+        if df_clean.empty:
+            st.warning("No valid state data available for heatmap")
+            return
+        
+        # Group by state and compute mean total_patients
+        df_grouped = df_clean.groupby('state')[target_metric].mean().reset_index()
+        df_grouped.columns = ['state', 'mean']
+        
+        if not df_grouped.empty:
+            # Create heatmap using plotly.express.choropleth
             fig = px.choropleth(
-                state_data,
+                df_grouped,
                 locations='state',
                 locationmode='USA-states',
                 color='mean',
-                hover_name='state',
-                hover_data=['max', 'min'],
-                title=f'Regional {target_metric.replace("_", " ").title()} Heatmap',
-                color_continuous_scale='Reds'
+                scope='usa',
+                color_continuous_scale='Reds',
+                title=f'Regional {target_metric.replace("_", " ").title()} Heatmap'
             )
             
             fig.update_layout(
@@ -370,6 +388,13 @@ class HospitalDashboard:
             )
             
             st.plotly_chart(fig, use_container_width=True)
+            
+            # Show summary statistics
+            st.write(f"**States with data:** {len(df_grouped)}")
+            st.write(f"**Average {target_metric.replace('_', ' ')}:** {df_grouped['mean'].mean():.2f}")
+            st.write(f"**Range:** {df_grouped['mean'].min():.2f} - {df_grouped['mean'].max():.2f}")
+        else:
+            st.warning("No grouped data available for heatmap")
     
     def create_model_evaluation_table(self, evaluation_metrics: Dict[str, Dict[str, float]]):
         """
@@ -496,7 +521,7 @@ class HospitalDashboard:
         if settings['auto_refresh']:
             st.info(f"🔄 Auto-refresh enabled. Next update in {settings['refresh_interval']} seconds.")
             time.sleep(settings['refresh_interval'])
-            st.experimental_rerun()
+            st.rerun()
 
 def main():
     """
