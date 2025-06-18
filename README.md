@@ -242,4 +242,4 @@ For questions or issues:
 
 ---
 
-**Built with ❤️ for healthcare analytics** 
+**Built with ❤️ for healthcare analytics**
